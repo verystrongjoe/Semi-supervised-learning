@@ -1,3 +1,6 @@
+# python train.py --c config/classic_cv/flexmatch/flexmatch_svhn_40_0.yaml
+
+
 
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.

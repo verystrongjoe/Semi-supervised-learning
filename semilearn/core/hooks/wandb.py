@@ -36,8 +36,7 @@ class WANDBHook(Hook):
         # resume = 'never'
         
         save_dir = os.path.join(algorithm.args.save_dir, 'wandb', algorithm.args.save_name)
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+        os.makedirs(save_dir, exist_ok=True)
 
         self.run = wandb.init(name=name, 
                               tags=tags, 
