@@ -1,3 +1,53 @@
+## 인수인계 메모 (2026-10)
+
+**한 줄 요약**: [microsoft/Semi-supervised-learning](https://github.com/microsoft/Semi-supervised-learning) (USB) 포크. upstream `1ef4cbe`(MultiMatch 머지, 2025-09) 위에 **FlexMatch/FixMatch 40-label(CIFAR-10, SVHN) 5-seed 재현 실험용 설정·실행 스크립트와 최신 라이브러리 호환 버그픽스**만 얹은 상태다. 알고리즘 자체를 새로 추가한 것은 없다. 아래 원본 README 는 upstream 그대로다.
+
+```
+upstream 1ef4cbe ── 8d914d1 bugfix ── 6b6ea5d yaml/sh 추가 ── cfbc2e6, 7317860 "same"(yaml/sh 수정) ── [미커밋 작업본]
+   (2025-09)          (2025-12-08)        (2025-12-21)             (2025-12-21)                     train.py, fixmatch yaml/sh
+```
+
+### 내가 추가/수정한 주요 파일
+
+| 파일 | 상태 | 내용 |
+|---|---|---|
+| `semilearn/algorithms/flexmatch/utils.py` | 커밋(8d914d1) | `FlexMatchThresholdingHook` 수정: warmup 판정을 `pseudo_counter.get(-1, 0)` 기준으로 변경, `selected_label` 을 CPU 인덱싱으로 갱신, `masking()` 에서 softmax 분기 제거(입력을 이미 확률로 간주). **upstream 과 동작이 달라지는 부분이므로 결과 비교 시 확인 필요** |
+| `semilearn/core/utils/misc.py` | 커밋(8d914d1) | `ruamel.yaml` 신버전 API(`YAML(typ='rt')`)로 설정 로딩 변경 |
+| `semilearn/nets/vit/vit.py` | 커밋(8d914d1) | `timm.models.layers` → `timm.layers` import 변경 |
+| `semilearn/core/hooks/wandb.py` | 커밋(8d914d1) | `os.makedirs(..., exist_ok=True)` |
+| `config/classic_cv/flexmatch/flexmatch_{cifar10,svhn}_40_{1111..5555}.yaml` | 커밋 | upstream `*_40_0.yaml` 복사본. seed, `save_name`/`load_path`, `use_wandb: True`/`use_tensorboard: False`, (cifar10) `gpu: 0` 만 다름 |
+| `config/classic_cv/flexmatch/flexmatch_svhn_40_0.yaml` | 커밋(8d914d1) | wandb 사용으로 변경 |
+| `run_flexmatch_cifar10_40.sh`, `run_flexmatch_svhn_40.sh` | 커밋 | 5개 seed 를 순차 실행 |
+| `train.py` | **미커밋** | argparse 정의를 한 줄로 합친 포맷 변경뿐(동작 변경 없음, `git diff train.py` 로 확인) |
+| `config/classic_cv/fixmatch/fixmatch_cifar10_40_1111.yaml`, `run_fixmatch_cifar10_40.sh` | **미커밋(untracked)** | FixMatch CIFAR-10 40-label 용. yaml 은 seed 1111 하나만 있음 |
+
+### 실행 방법
+
+```bash
+pip install -r requirements.txt            # 환경 구성은 아래 원본 README 의 Installation 참고
+python train.py --c config/classic_cv/flexmatch/flexmatch_svhn_40_1111.yaml     # 단일 실행
+nohup ./run_flexmatch_svhn_40.sh    > flexmatch_svhn_40.log    2>&1 &           # seed 1111~5555 순차
+nohup ./run_flexmatch_cifar10_40.sh > flexmatch_cifar10_40.log 2>&1 &
+nohup ./run_fixmatch_cifar10_40.sh  > fixmatch_cifar10_40.log  2>&1 &
+```
+
+### 데이터·체크포인트 위치
+
+- `data/`, `saved_models/` 는 `.gitignore` 대상이라 git 에 없다. 데이터셋은 첫 실행 시 `data/<dataset>/` 로 다운로드되고, 체크포인트는 `saved_models/classic_cv/<save_name>/`(`latest_model.pth` 등), wandb 로컬 로그는 `saved_models/classic_cv/wandb/` 에 생성된다.
+- `results/` 는 이 저장소에서는 **upstream 벤치마크 CSV 가 git 에 들어 있는 폴더**다(내 실험 결과 아님). 내 실험 수치는 wandb 에만 있으며 프로젝트/계정은 확인 필요.
+- 이 PC 의 작업 폴더에는 `data/cifar10`, `data/svhn`, `saved_models/classic_cv/{fixmatch_cifar10_40_1111, flexmatch_svhn_40_0}` 가 남아 있다(학습 완료 여부는 확인 필요).
+
+### 주의사항
+
+- `run_flexmatch_cifar10_40.sh` 는 `--config` 옵션을 쓰는데 `train.py` 에는 `--c` 만 정의돼 있어 **그대로는 인자 오류가 난다**(`--c` 로 바꿔야 함. svhn 스크립트는 cfbc2e6 에서 이미 고침).
+- `run_fixmatch_cifar10_40.sh` 는 seed 2222~5555 yaml 을 참조하지만 **해당 파일이 없다**. 1111 yaml 을 복사해 `seed`/`save_name`/`load_path` 를 바꿔 만들어야 한다.
+- 모든 yaml 이 `resume: True` + `load_path: .../latest_model.pth` 이다. 같은 `save_name` 으로 재실행하면 기존 체크포인트에서 이어서 학습하므로, 처음부터 돌리려면 해당 `saved_models/classic_cv/<save_name>/` 유무를 먼저 확인할 것.
+- yaml 이 `use_wandb: True` 라서 실행 전 `wandb login` 이 필요하다(코드에 키는 하드코딩돼 있지 않음).
+- yaml 은 `multiprocessing_distributed: True`, `num_train_iter: 1048576`(upstream 기본)이다. GPU 할당은 cifar10 flexmatch yaml 만 `gpu: 0`, 나머지는 `gpu: None`.
+- 최종 정확도 등 실험 결과는 이 저장소에 기록돼 있지 않다 → 확인 필요.
+
+---
+
 <div id="top"></div>
 <!--
 *** Thanks for checking out the Best-README-Template. If you have a suggestion
